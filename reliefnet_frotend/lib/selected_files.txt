@@ -1,0 +1,684 @@
+===== core/navigation/app_router.dart =====
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'app_session.dart';
+import 'app_session_notifier.dart';
+import '../../features/auth/presentation/screens/auth_landing_page.dart';
+import '../../features/role_selection/presentation/screens/role_selection_screen.dart';
+import '../../features/onboarding/presentation/screens/oboarding_flow_page.dart';
+import '../../features/main_shell/main_shell.dart';
+
+/// Central navigation router - decides which screen to show based on app state
+/// This replaces scattered Navigator.push() calls throughout the app
+class AppRouter extends ConsumerWidget {
+  const AppRouter({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final session = ref.watch(appSessionProvider);
+
+    // Route based on session status
+    switch (session.status) {
+      case AppStatus.unauthenticated:
+        return const AuthLandingPage();
+
+      case AppStatus.roleSelectionRequired:
+        return const RoleSelectionScreen();
+
+      case AppStatus.onboardingRequired:
+        if (session.activeRole == null) {
+          // Fallback - should not happen in normal flow
+          return const RoleSelectionScreen();
+        }
+        return OnboardingFlowPage(
+          userRoleId: session.activeRole!['user_role_id'] as int,
+        );
+
+      case AppStatus.active:
+        return const MainShell();
+
+      default:
+        // Loading or unknown state - show splash
+        return const Scaffold(
+          body: Center(
+            child: CircularProgressIndicator(),
+          ),
+        );
+    }
+  }
+}
+===== core/navigation/app_session.dart =====
+/// Represents the overall app state for navigation decisions
+enum AppStatus {
+  unauthenticated,      // User not logged in
+  authenticated,        // User logged in but no role selected
+  roleSelectionRequired, // User needs to select a role
+  onboardingRequired,   // User has role but not onboarded
+  active,               // User is fully active in system
+}
+
+/// Core app session state - single source of truth for navigation
+class AppSession {
+  final AppStatus status;
+  final Map<String, dynamic>? user;
+  final List<Map<String, dynamic>> roles;
+  final Map<String, dynamic>? activeRole;
+  final bool onboardingCompleted;
+
+  const AppSession({
+    required this.status,
+    this.user,
+    this.roles = const [],
+    this.activeRole,
+    this.onboardingCompleted = false,
+  });
+
+  /// Factory for initial unauthenticated state
+  factory AppSession.initial() => const AppSession(status: AppStatus.unauthenticated);
+
+  /// Create copy with updated fields
+  AppSession copyWith({
+    AppStatus? status,
+    Map<String, dynamic>? user,
+    List<Map<String, dynamic>>? roles,
+    Map<String, dynamic>? activeRole,
+    bool? onboardingCompleted,
+  }) {
+    return AppSession(
+      status: status ?? this.status,
+      user: user ?? this.user,
+      roles: roles ?? this.roles,
+      activeRole: activeRole ?? this.activeRole,
+      onboardingCompleted: onboardingCompleted ?? this.onboardingCompleted,
+    );
+  }
+
+  /// Computed properties for cleaner state checks
+  bool get isAuthenticated => status != AppStatus.unauthenticated;
+  bool get hasRole => activeRole != null;
+  bool get isActive => status == AppStatus.active;
+  bool get needsRoleSelection => status == AppStatus.roleSelectionRequired;
+  bool get needsOnboarding => status == AppStatus.onboardingRequired;
+}
+===== core/navigation/app_session_notifier.dart =====
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'app_session.dart';
+
+/// Notifier that manages the global app session state
+/// This is the single source of truth for navigation decisions
+class AppSessionNotifier extends Notifier<AppSession> {
+  @override
+  AppSession build() => AppSession.initial();
+
+  /// Called after successful login/register
+  void setAuthenticated({
+    required Map<String, dynamic> user,
+    required List<Map<String, dynamic>> roles,
+  }) {
+    final hasActiveRole = roles.any((role) => role['is_active'] == true);
+    final hasAnyRole = roles.isNotEmpty;
+
+    AppStatus newStatus;
+    Map<String, dynamic>? activeRole;
+
+    if (!hasAnyRole) {
+      // No roles assigned - need role selection
+      newStatus = AppStatus.roleSelectionRequired;
+    } else if (!hasActiveRole) {
+      // Has roles but none active - needs onboarding
+      newStatus = AppStatus.onboardingRequired;
+      // Find the first inactive role (user can select which one to onboard)
+      activeRole = roles.firstWhere(
+        (role) => role['is_active'] != true,
+        orElse: () => roles.first,
+      );
+    } else {
+      // Has active role - fully active
+      newStatus = AppStatus.active;
+      activeRole = roles.firstWhere((role) => role['is_active'] == true);
+    }
+
+    state = AppSession(
+      status: newStatus,
+      user: user,
+      roles: roles,
+      activeRole: activeRole,
+    );
+  }
+
+  /// Called when user selects a role
+  void setRoleSelected(Map<String, dynamic> selectedRole) {
+    state = state.copyWith(
+      status: AppStatus.onboardingRequired,
+      activeRole: selectedRole,
+    );
+  }
+
+  /// Called when onboarding is completed
+  void setOnboardingCompleted() {
+    state = state.copyWith(
+      status: AppStatus.active,
+      onboardingCompleted: true,
+    );
+  }
+
+  /// Called on logout
+  void logout() {
+    state = AppSession.initial();
+  }
+
+  /// Force refresh session state (useful after backend changes)
+  void refreshSession({
+    required Map<String, dynamic> user,
+    required List<Map<String, dynamic>> roles,
+  }) {
+    setAuthenticated(user: user, roles: roles);
+  }
+}
+
+/// Global provider for app session state
+final appSessionProvider = NotifierProvider<AppSessionNotifier, AppSession>(() {
+  return AppSessionNotifier();
+});
+===== features/auth/data/datasources/auth_api.dart =====
+import 'package:dio/dio.dart';
+
+class AuthApi {
+  final Dio dio;
+  AuthApi(this.dio);
+
+  Future<Map<String, dynamic>> register({required String name, required String email, required String password}) async {
+    final res = await dio.post('/auth/register', data: {
+      'name': name,
+      'email': email,
+      'password': password,
+    });
+    return Map<String, dynamic>.from(res.data);
+  }
+
+  Future<Map<String, dynamic>> login({required String email, required String password}) async {
+    final res = await dio.post('/auth/login', data: {
+      'email': email,
+      'password': password,
+    });
+    return Map<String, dynamic>.from(res.data);
+  }
+}
+===== features/role_selection/presentation/screens/role_selection_screen.dart =====
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:reliefnet_app/core/navigation/app_session_notifier.dart';
+
+/// Role selection screen - first step after authentication
+/// User must choose their role before onboarding begins
+class RoleSelectionScreen extends ConsumerStatefulWidget {
+  const RoleSelectionScreen({super.key});
+
+  @override
+  ConsumerState<RoleSelectionScreen> createState() => _RoleSelectionScreenState();
+}
+
+class _RoleSelectionScreenState extends ConsumerState<RoleSelectionScreen>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _animationController;
+  late Animation<double> _fadeAnimation;
+  late Animation<Offset> _slideAnimation;
+
+  String? _selectedRoleId;
+  bool _isLoading = false;
+
+  // Available roles - in real app, fetch from backend
+  final List<Map<String, dynamic>> _availableRoles = [
+    {
+      'id': '1',
+      'name': 'Donor',
+      'description': 'Support relief efforts with donations',
+      'icon': Icons.volunteer_activism,
+      'color': Colors.green,
+      'benefits': ['Create donation campaigns', 'Track impact', 'Connect with NGOs'],
+    },
+    {
+      'id': '2',
+      'name': 'NGO Admin',
+      'description': 'Manage relief operations and campaigns',
+      'icon': Icons.business,
+      'color': Colors.blue,
+      'benefits': ['Launch campaigns', 'Manage volunteers', 'Coordinate relief'],
+    },
+    {
+      'id': '3',
+      'name': 'Volunteer',
+      'description': 'Contribute time and skills to help others',
+      'icon': Icons.people,
+      'color': Colors.orange,
+      'benefits': ['Find opportunities', 'Skill matching', 'Community impact'],
+    },
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _animationController = AnimationController(
+      duration: const Duration(milliseconds: 800),
+      vsync: this,
+    );
+
+    _fadeAnimation = Tween<double>(begin: 0, end: 1).animate(
+      CurvedAnimation(parent: _animationController, curve: Curves.easeOut),
+    );
+
+    _slideAnimation = Tween<Offset>(
+      begin: const Offset(0, 0.3),
+      end: Offset.zero,
+    ).animate(CurvedAnimation(
+      parent: _animationController,
+      curve: Curves.easeOutCubic,
+    ));
+
+    _animationController.forward();
+  }
+
+  @override
+  void dispose() {
+    _animationController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Colors.teal.shade50,
+              Colors.blue.shade50,
+            ],
+          ),
+        ),
+        child: SafeArea(
+          child: FadeTransition(
+            opacity: _fadeAnimation,
+            child: SlideTransition(
+              position: _slideAnimation,
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Header
+                    _buildHeader(),
+
+                    const SizedBox(height: 32),
+
+                    // Role selection
+                    Expanded(child: _buildRoleSelection()),
+
+                    const SizedBox(height: 24),
+
+                    // Continue button
+                    _buildContinueButton(),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHeader() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 60,
+          height: 60,
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [Colors.teal.shade400, Colors.blue.shade400],
+            ),
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: const Icon(
+            Icons.favorite,
+            color: Colors.white,
+            size: 32,
+          ),
+        ),
+        const SizedBox(height: 16),
+        const Text(
+          'Welcome to ReliefNet',
+          style: TextStyle(
+            fontSize: 28,
+            fontWeight: FontWeight.bold,
+            color: Color(0xFF1A1A1A),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Choose your role to get started and help make a difference.',
+          style: TextStyle(
+            fontSize: 16,
+            color: Colors.grey.shade600,
+            height: 1.5,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildRoleSelection() {
+    return ListView.builder(
+      itemCount: _availableRoles.length,
+      itemBuilder: (context, index) {
+        final role = _availableRoles[index];
+        final isSelected = _selectedRoleId == role['id'];
+
+        return AnimatedContainer(
+          duration: const Duration(milliseconds: 300),
+          margin: const EdgeInsets.only(bottom: 16),
+          decoration: BoxDecoration(
+            color: isSelected ? role['color'].withOpacity(0.1) : Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: isSelected ? role['color'] : Colors.grey.shade200,
+              width: isSelected ? 2 : 1,
+            ),
+            boxShadow: isSelected
+                ? [
+                    BoxShadow(
+                      color: role['color'].withOpacity(0.2),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
+                    )
+                  ]
+                : [
+                    BoxShadow(
+                      color: Colors.grey.withOpacity(0.08),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    )
+                  ],
+          ),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(16),
+              onTap: () => setState(() => _selectedRoleId = role['id']),
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: Row(
+                  children: [
+                    // Icon
+                    Container(
+                      width: 56,
+                      height: 56,
+                      decoration: BoxDecoration(
+                        color: role['color'].withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Icon(
+                        role['icon'],
+                        color: role['color'],
+                        size: 28,
+                      ),
+                    ),
+
+                    const SizedBox(width: 16),
+
+                    // Content
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            role['name'],
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: isSelected ? role['color'] : Colors.black87,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            role['description'],
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Colors.grey.shade600,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 4,
+                            children: (role['benefits'] as List<String>).map((benefit) {
+                              return Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: role['color'].withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Text(
+                                  benefit,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: role['color'],
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              );
+                            }).toList(),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    // Selection indicator
+                    AnimatedOpacity(
+                      opacity: isSelected ? 1 : 0,
+                      duration: const Duration(milliseconds: 200),
+                      child: Container(
+                        width: 24,
+                        height: 24,
+                        decoration: BoxDecoration(
+                          color: role['color'],
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.check,
+                          color: Colors.white,
+                          size: 16,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildContinueButton() {
+    return SizedBox(
+      width: double.infinity,
+      height: 56,
+      child: ElevatedButton(
+        onPressed: _selectedRoleId != null && !_isLoading ? _continue : null,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.teal,
+          foregroundColor: Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          elevation: 4,
+        ),
+        child: _isLoading
+            ? const SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                ),
+              )
+            : const Text(
+                'Continue',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+      ),
+    );
+  }
+
+  Future<void> _continue() async {
+    if (_selectedRoleId == null) return;
+
+    setState(() => _isLoading = true);
+
+    try {
+      // Find selected role data
+      final selectedRole = _availableRoles.firstWhere(
+        (role) => role['id'] == _selectedRoleId,
+      );
+
+      // In real app, this would call backend to assign role
+      // For now, simulate role assignment
+      final mockUserRole = {
+        'id': int.parse(_selectedRoleId!),
+        'name': selectedRole['name'],
+        'user_role_id': DateTime.now().millisecondsSinceEpoch, // Mock ID
+        'is_active': false, // Will be activated after onboarding
+      };
+
+      // Update session state
+      ref.read(appSessionProvider.notifier).setRoleSelected(mockUserRole);
+
+      // Navigation will happen automatically via AppRouter
+
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to select role: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+}
+===== features/onboarding/presentation/notifiers/onboarding_notifier.dart =====
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:reliefnet_app/features/onboarding/domain/entities/submit_step_result.dart';
+import 'package:reliefnet_app/features/onboarding/domain/usecases/start_onboarding_flow_usecase.dart';
+import 'package:reliefnet_app/features/onboarding/domain/usecases/submit_step_usecase.dart';
+import 'package:reliefnet_app/core/navigation/app_session_notifier.dart';
+import 'package:reliefnet_app/features/onboarding/presentation/providers/onboarding_dependencies.dart';
+import '../state/onboarding_state.dart';
+
+class OnboardingNotifier extends Notifier<OnboardingState> {
+  late final StartOnboardingFlowUseCase startFlowUseCase;
+  late final SubmitStepUseCase submitStepUseCase;
+
+  @override
+  OnboardingState build() {
+    startFlowUseCase = ref.read(startFlowUseCaseProvider);
+    submitStepUseCase = ref.read(submitStepUseCaseProvider);
+    return OnboardingState.initial();
+  }
+
+  Future<void> startFlow(int userRoleId) async {
+    state = state.copyWith(isLoading: true, errors: {});
+    try {
+      final result = await startFlowUseCase.execute(
+        userRoleId: userRoleId,
+      );
+
+      state = state.copyWith(
+        flow: result.flow,
+        currentStep: result.firstStep,
+        schema: result.schema,
+        isLoading: false,
+        isCompleted: false,
+        isPendingApproval: false,
+        errors: {},
+      );
+    } catch (e) {
+      state = state.copyWith(
+        isLoading: false,
+        errors: {'startFlow': e.toString()},
+      );
+    }
+  }
+
+  Future<void> submitStep({
+    required int flowId,
+    required int stepId,
+    required Map<String, dynamic> data,
+  }) async {
+    state = state.copyWith(isLoading: true, errors: {});
+    final result = await submitStepUseCase.execute(
+      flowId: flowId,
+      stepId: stepId,
+      data: data,
+    );
+
+    if (result.type == SubmitStepResultType.nextStep) {
+      state = state.copyWith(
+        currentStep: result.nextStep,
+        schema: result.schema,
+        isLoading: false,
+        errors: {},
+      );
+      return;
+    }
+
+    if (result.type == SubmitStepResultType.completed) {
+      state = state.copyWith(
+        isCompleted: true,
+        isLoading: false,
+      );
+
+      // Update global session state - user is now active
+      ref.read(appSessionProvider.notifier).setOnboardingCompleted();
+
+      return;
+    }
+
+    if (result.type == SubmitStepResultType.pendingApproval) {
+      state = state.copyWith(
+        isPendingApproval: true,
+        isLoading: false,
+      );
+      return;
+    }
+
+    if (result.type == SubmitStepResultType.validationFailed) {
+      state = state.copyWith(
+        errors: result.errors,
+        isLoading: false,
+      );
+      return;
+    }
+
+    state = state.copyWith(
+      isLoading: false,
+    );
+  }
+}

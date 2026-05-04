@@ -1,0 +1,144 @@
+===== flow.dart =====
+enum FlowStatus { inProgress, completed, failed }
+
+class Flow {
+  final int id;
+  final int userRoleId;
+  final int templateId;
+  final int? currentStepId;
+  final FlowStatus status;
+
+  Flow({
+    required this.id,
+    required this.userRoleId,
+    required this.templateId,
+    required this.currentStepId,
+    required this.status,
+  });
+
+  /// 🔥 BUSINESS RULES
+
+  bool get isCompleted => status == FlowStatus.completed;
+
+  bool get isInProgress => status == FlowStatus.inProgress;
+
+  /// cannot move if completed
+  void validateCanMoveNext() {
+    if (isCompleted) {
+      throw Exception("Flow is already completed");
+    }
+  }
+
+  /// move to next step
+  Flow moveToStep(int stepId) {
+    validateCanMoveNext();
+
+    return Flow(
+      id: id,
+      userRoleId: userRoleId,
+      templateId: templateId,
+      currentStepId: stepId,
+      status: status,
+    );
+  }
+
+  /// complete flow
+  Flow complete() {
+    if (isCompleted) return this;
+
+    return Flow(
+      id: id,
+      userRoleId: userRoleId,
+      templateId: templateId,
+      currentStepId: currentStepId,
+      status: FlowStatus.completed,
+    );
+  }
+}
+
+===== step.dart =====
+class StepEntity {
+  final int id;
+  final String stepKey;
+  final int order;
+  final bool isRequired;
+  final Map<String, dynamic> inputSchema;
+
+  StepEntity({
+    required this.id,
+    required this.stepKey,
+    required this.order,
+    required this.isRequired,
+    required this.inputSchema,
+  });
+
+  /// validate input (basic for now)
+  void validate(Map<String, dynamic> data) {
+    if (isRequired && data.isEmpty) {
+      throw Exception("Step data is required");
+    }
+
+    // later: schema validation
+  }
+}
+
+===== stepData.dart =====
+enum StepStatus { notStarted, inProgress, submitted, approved, rejected }
+
+class StepData {
+  final int flowId;
+  final int stepId;
+  final Map<String, dynamic> data;
+  final StepStatus status;
+
+  StepData({
+    required this.flowId,
+    required this.stepId,
+    required this.data,
+    required this.status,
+  });
+}
+
+===== template.dart =====
+
+
+import 'package:reliefnet_app/features/onboarding/domain/entities/step.dart';
+
+class Template {
+  final int id;
+  final int roleId;
+  final List<StepEntity> steps;
+  final bool requiresApproval;
+
+  Template({
+    required this.id,
+    required this.roleId,
+    required this.steps,
+    required this.requiresApproval,
+  });
+
+  StepEntity getFirstStep() {
+    if (steps.isEmpty) {
+      throw Exception("Template has no steps");
+    }
+
+    steps.sort((a, b) => a.order.compareTo(b.order));
+    return steps.first;
+  }
+}
+
+===== userRole.dart =====
+class UserRole {
+  final int id;
+  final int userId;
+  final int roleId;
+  final bool isActive;
+
+  UserRole({
+    required this.id,
+    required this.userId,
+    required this.roleId,
+    required this.isActive,
+  });
+}
+
