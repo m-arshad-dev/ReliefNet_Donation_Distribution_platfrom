@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import 'package:reliefnet_app/core/navigation/app_session.dart';
 import 'package:reliefnet_app/core/navigation/app_session_notifier.dart';
 import 'package:reliefnet_app/features/auth/application/auth_service.dart';
@@ -110,8 +111,10 @@ void main() {
       );
 
       expect(container.read(authTokenProvider), isNull);
-      expect(container.read(appSessionProvider).status,
-          AppStatus.unauthenticated);
+      expect(
+        container.read(appSessionProvider).status,
+        AppStatus.unauthenticated,
+      );
     });
 
     test('logout clears providers and session', () async {
@@ -123,8 +126,10 @@ void main() {
 
       expect(container.read(authTokenProvider), isNull);
       expect(container.read(authUserProvider), isNull);
-      expect(container.read(appSessionProvider).status,
-          AppStatus.unauthenticated);
+      expect(
+        container.read(appSessionProvider).status,
+        AppStatus.unauthenticated,
+      );
     });
   });
 }

@@ -5,6 +5,7 @@ class AuthSessionPayloadParser {
 
   AuthSessionPayload parse(Map<String, dynamic> response) {
     final raw = response['data'] ?? response;
+
     if (raw is! Map) {
       throw const FormatException('Unexpected authentication response shape');
     }
@@ -27,7 +28,6 @@ class AuthSessionPayloadParser {
     if (value is Map) {
       return Map<String, dynamic>.from(value);
     }
-
     return <String, dynamic>{};
   }
 
@@ -43,7 +43,11 @@ class AuthSessionPayloadParser {
   }
 
   String? _extractToken(Map<String, dynamic> data) {
-    final candidates = [data['token'], data['accessToken'], data['access_token']];
+    final candidates = [
+      data['token'],
+      data['accessToken'],
+      data['access_token'],
+    ];
 
     for (final candidate in candidates) {
       if (candidate is String && candidate.isNotEmpty) {

@@ -56,13 +56,15 @@ class AuthApi {
       final statusCode = error.response?.statusCode;
       final payload = error.response?.data;
 
-      // Status-specific handling (merged best behavior)
+      // Status-specific handling
       if (statusCode == 401) {
         throw const AuthApiException('Invalid credentials');
       }
 
       if (statusCode == 429) {
-        throw const AuthApiException('Too many attempts. Please retry later.');
+        throw const AuthApiException(
+          'Too many attempts. Please retry later.',
+        );
       }
 
       if (payload is Map<String, dynamic>) {

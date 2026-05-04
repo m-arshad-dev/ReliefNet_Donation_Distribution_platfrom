@@ -9,8 +9,10 @@ class AuthService {
   final Ref ref;
   final AuthSessionMapper sessionMapper;
 
-  AuthService(this.ref, {AuthSessionMapper? sessionMapper})
-      : sessionMapper = sessionMapper ?? const AuthSessionMapper();
+  AuthService(
+    this.ref, {
+    AuthSessionMapper? sessionMapper,
+  }) : sessionMapper = sessionMapper ?? const AuthSessionMapper();
 
   Future<void> login({
     required String email,
