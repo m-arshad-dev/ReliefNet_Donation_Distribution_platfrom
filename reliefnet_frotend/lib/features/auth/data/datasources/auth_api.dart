@@ -10,6 +10,9 @@ class AuthApiException implements Exception {
 }
 
 class AuthApi {
+  static const int _unauthorizedStatus = 401;
+  static const int _tooManyRequestsStatus = 429;
+
   final Dio dio;
 
   AuthApi(this.dio);
@@ -57,11 +60,11 @@ class AuthApi {
       final payload = error.response?.data;
 
       // Status-specific handling
-      if (statusCode == 401) {
+      if (statusCode == _unauthorizedStatus) {
         throw const AuthApiException('Invalid credentials');
       }
 
-      if (statusCode == 429) {
+      if (statusCode == _tooManyRequestsStatus) {
         throw const AuthApiException(
           'Too many attempts. Please retry later.',
         );
