@@ -10,18 +10,18 @@ class AuthApiException implements Exception {
 }
 
 class AuthApi {
-  final Dio dio;
-
   AuthApi(this.dio);
+
+  final Dio dio;
 
   Future<Map<String, dynamic>> register({
     required String name,
     required String email,
     required String password,
   }) {
-    return _sendAuthRequest(
-      endpoint: '/auth/register',
-      payload: {
+    return _postAuth(
+      '/auth/register',
+      data: {
         'name': name,
         'email': email,
         'password': password,
@@ -34,9 +34,9 @@ class AuthApi {
     required String email,
     required String password,
   }) {
-    return _sendAuthRequest(
-      endpoint: '/auth/login',
-      payload: {
+    return _postAuth(
+      '/auth/login',
+      data: {
         'email': email,
         'password': password,
       },
@@ -44,22 +44,41 @@ class AuthApi {
     );
   }
 
-  Future<Map<String, dynamic>> _sendAuthRequest({
-    required String endpoint,
-    required Map<String, dynamic> payload,
+  Future<Map<String, dynamic>> _postAuth(
+    String path, {
+    required Map<String, dynamic> data,
     required String fallbackMessage,
   }) async {
-    final response = await dio.post(endpoint, data: payload);
+    try {
+      final response = await dio.post(path, data: data);
+      return _parseAuthResponse(response.data, fallbackMessage);
+    } on DioException catch (error) {
+      final payload = error.response?.data;
 
-    if (response.data is! Map) {
-      throw const AuthApiException('Unexpected API response format');
+      if (payload is Map<String, dynamic>) {
+        throw AuthApiException(
+          _extractErrorMessage(payload, fallbackMessage),
+        );
+      }
+
+      throw AuthApiException(error.message ?? fallbackMessage);
+    }
+  }
+
+  Map<String, dynamic> _parseAuthResponse(
+    dynamic payload,
+    String fallbackMessage,
+  ) {
+    if (payload is! Map) {
+      throw AuthApiException(fallbackMessage);
     }
 
-    final responseData = Map<String, dynamic>.from(response.data as Map);
-    final isSuccess = responseData['success'] != false;
+    final responseData = Map<String, dynamic>.from(payload as Map);
 
-    if (!isSuccess) {
-      throw AuthApiException(_extractErrorMessage(responseData, fallbackMessage));
+    if (responseData['success'] == false) {
+      throw AuthApiException(
+        _extractErrorMessage(responseData, fallbackMessage),
+      );
     }
 
     return responseData;
