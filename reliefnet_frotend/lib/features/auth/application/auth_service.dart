@@ -2,8 +2,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/di/di.dart';
 import '../../../core/navigation/app_session_notifier.dart';
-import 'auth_session_mapper.dart';
 import '../data/providers/auth_providers.dart';
+import 'auth_session_mapper.dart';
 
 class AuthService {
   final Ref ref;

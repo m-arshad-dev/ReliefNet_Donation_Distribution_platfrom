@@ -10,9 +10,9 @@ class AuthApiException implements Exception {
 }
 
 class AuthApi {
-  AuthApi(this.dio);
-
   final Dio dio;
+
+  AuthApi(this.dio);
 
   Future<Map<String, dynamic>> register({
     required String name,
