@@ -7,6 +7,22 @@ class AuthService {
 
   AuthService(this.ref);
 
+  Map<String, dynamic> _extractPayload(Map<String, dynamic> response) {
+    final raw = response['data'] ?? response;
+    if (raw is Map<String, dynamic>) return raw;
+    if (raw is Map) return Map<String, dynamic>.from(raw);
+    throw Exception('Invalid authentication payload');
+  }
+
+  List<Map<String, dynamic>> _extractRoles(Map<String, dynamic> data) {
+    final rawRoles = data['roles'];
+    if (rawRoles is! List) return const [];
+    return rawRoles
+        .whereType<Map>()
+        .map((role) => Map<String, dynamic>.from(role))
+        .toList();
+  }
+
   Future<void> login({
     required String email,
     required String password,
@@ -15,10 +31,9 @@ class AuthService {
 
     final res = await authRepo.login(email, password);
 
-    final data = (res['data'] ?? res) as Map<String, dynamic>;
-
+    final data = _extractPayload(res);
     final user = Map<String, dynamic>.from(data['user'] ?? {});
-    final roles = List<Map<String, dynamic>>.from(data['roles'] ?? []);
+    final roles = _extractRoles(data);
 
     // 🔥 SINGLE SOURCE OF TRUTH (session)
     ref.read(appSessionProvider.notifier).setAuthenticated(
@@ -36,10 +51,9 @@ class AuthService {
 
     final res = await authRepo.register(name, email, password);
 
-    final data = (res['data'] ?? res) as Map<String, dynamic>;
-
+    final data = _extractPayload(res);
     final user = Map<String, dynamic>.from(data['user'] ?? {});
-    final roles = List<Map<String, dynamic>>.from(data['roles'] ?? []);
+    final roles = _extractRoles(data);
 
     ref.read(appSessionProvider.notifier).setAuthenticated(
       user: user,

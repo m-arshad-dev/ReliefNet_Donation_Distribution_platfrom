@@ -10,6 +10,8 @@ abstract class AuthFormData {
   Map<String, dynamic> toMap();
 }
 
+enum AuthFormType { login, register }
+
 /// Login form data
 class LoginFormData extends AuthFormData {
   final String email;
@@ -46,6 +48,7 @@ class RegisterFormData extends AuthFormData {
 
 /// Reusable auth form widget
 class AppAuthForm extends StatefulWidget {
+  final AuthFormType formType;
   final String title;
   final String? subtitle;
   final List<AuthFormField> fields;
@@ -57,6 +60,7 @@ class AppAuthForm extends StatefulWidget {
 
   const AppAuthForm({
     super.key,
+    required this.formType,
     required this.title,
     this.subtitle,
     required this.fields,
@@ -103,19 +107,19 @@ class _AppAuthFormState extends State<AppAuthForm> {
       data[field.key] = _controllers[field.key]!.text.trim();
     }
 
-    if (widget.title.toLowerCase().contains('login')) {
+    if (widget.formType == AuthFormType.login) {
       return LoginFormData(
         email: data['email'],
         password: data['password'],
       );
-    } else {
-      return RegisterFormData(
-        name: data['name'] ?? '',
-        email: data['email'],
-        password: data['password'],
-        confirmPassword: data['confirmPassword'] ?? '',
-      );
     }
+
+    return RegisterFormData(
+      name: data['name'] ?? '',
+      email: data['email'],
+      password: data['password'],
+      confirmPassword: data['confirmPassword'] ?? '',
+    );
   }
 
   Future<void> _handleSubmit() async {
