@@ -56,7 +56,7 @@ class AuthApi {
       final statusCode = error.response?.statusCode;
       final payload = error.response?.data;
 
-      // Keep improved status-specific handling from codex branch
+      // Status-specific handling (best from codex branch)
       if (statusCode == 401) {
         throw const AuthApiException('Invalid credentials');
       }
@@ -80,7 +80,7 @@ class AuthApi {
     String fallbackMessage,
   ) {
     if (payload is! Map) {
-      throw AuthApiException('Unexpected API response format');
+      throw const AuthApiException('Unexpected API response format');
     }
 
     final responseData = Map<String, dynamic>.from(payload as Map);

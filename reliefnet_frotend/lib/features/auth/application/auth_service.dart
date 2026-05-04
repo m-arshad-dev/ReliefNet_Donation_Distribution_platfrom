@@ -11,13 +11,16 @@ class AuthService {
 
   Map<String, dynamic> _extractPayload(Map<String, dynamic> response) {
     final raw = response['data'] ?? response;
+
     if (raw is Map<String, dynamic>) return raw;
     if (raw is Map) return Map<String, dynamic>.from(raw);
+
     throw const FormatException('Invalid authentication payload');
   }
 
   List<Map<String, dynamic>> _extractRoles(Map<String, dynamic> data) {
     final rawRoles = data['roles'];
+
     if (rawRoles is! List) return const [];
 
     return rawRoles
