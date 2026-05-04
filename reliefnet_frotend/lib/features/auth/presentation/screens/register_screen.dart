@@ -36,6 +36,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   @override
   Widget build(BuildContext context) {
     return AppAuthForm(
+      formType: AuthFormType.register,
       title: 'Join the Mission',
       subtitle: 'Create an account and start making a difference',
       fields: [
