@@ -56,7 +56,7 @@ class AuthApi {
       final statusCode = error.response?.statusCode;
       final payload = error.response?.data;
 
-      // Status-specific handling (best from codex branch)
+      // Status-specific handling (merged best behavior)
       if (statusCode == 401) {
         throw const AuthApiException('Invalid credentials');
       }

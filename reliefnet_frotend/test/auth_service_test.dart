@@ -111,8 +111,10 @@ void main() {
       );
 
       expect(container.read(authTokenProvider), isNull);
-      expect(container.read(appSessionProvider).status,
-          AppStatus.unauthenticated);
+      expect(
+        container.read(appSessionProvider).status,
+        AppStatus.unauthenticated,
+      );
     });
 
     test('logout clears providers and session', () async {
@@ -124,8 +126,10 @@ void main() {
 
       expect(container.read(authTokenProvider), isNull);
       expect(container.read(authUserProvider), isNull);
-      expect(container.read(appSessionProvider).status,
-          AppStatus.unauthenticated);
+      expect(
+        container.read(appSessionProvider).status,
+        AppStatus.unauthenticated,
+      );
     });
   });
 }
