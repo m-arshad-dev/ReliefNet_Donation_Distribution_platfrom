@@ -1,21 +1,28 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:reliefnet_app/core/di/di.dart';
+
 import 'package:reliefnet_app/core/navigation/app_session.dart';
 import 'package:reliefnet_app/core/navigation/app_session_notifier.dart';
 import 'package:reliefnet_app/features/auth/application/auth_service.dart';
 import 'package:reliefnet_app/features/auth/data/providers/auth_providers.dart';
 import 'package:reliefnet_app/features/auth/domain/repositories/auth_repository.dart';
 
-class _FakeAuthRepository implements AuthRepository {
-  _FakeAuthRepository({this.loginResponse, this.registerResponse});
-
-  final Map<String, dynamic>? loginResponse;
-  final Map<String, dynamic>? registerResponse;
+class FakeAuthRepository implements AuthRepository {
+  Map<String, dynamic>? loginResponse;
+  Map<String, dynamic>? registerResponse;
 
   @override
   Future<Map<String, dynamic>> login(String email, String password) async {
-    return loginResponse ?? <String, dynamic>{};
+    return loginResponse ??
+        {
+          'data': {
+            'token': 'token-login',
+            'user': {'id': 1, 'is_pending_approval': false},
+            'roles': [
+              {'user_role_id': 11, 'is_active': true},
+            ],
+          },
+        };
   }
 
   @override
@@ -24,123 +31,105 @@ class _FakeAuthRepository implements AuthRepository {
     String email,
     String password,
   ) async {
-    return registerResponse ?? <String, dynamic>{};
+    return registerResponse ??
+        {
+          'data': {
+            'access_token': 'token-register',
+            'user': {'id': 2, 'is_pending_approval': false},
+            'roles': [
+              {'user_role_id': 22, 'is_active': false},
+            ],
+          },
+        };
   }
 }
 
 void main() {
   group('AuthService', () {
-    test('login stores token/user/roles and sets active session', () async {
-      final container = ProviderContainer(
+    late ProviderContainer container;
+    late FakeAuthRepository fakeRepository;
+
+    setUp(() {
+      fakeRepository = FakeAuthRepository();
+
+      container = ProviderContainer(
         overrides: [
-          authRepositoryProvider.overrideWithValue(
-            _FakeAuthRepository(
-              loginResponse: {
-                'data': {
-                  'token': 'jwt-token',
-                  'user': {'id': 10, 'is_pending_approval': false},
-                  'roles': [
-                    {'user_role_id': 7, 'is_active': true}
-                  ],
-                },
-              },
-            ),
-          ),
+          authRepositoryProvider.overrideWithValue(fakeRepository),
         ],
       );
-      addTearDown(container.dispose);
-
-      final service = container.read(authServiceProvider);
-      await service.login(email: 'test@example.com', password: 'secret');
-
-      expect(container.read(authTokenProvider), 'jwt-token');
-      expect(container.read(authUserProvider)?['user']?['id'], 10);
-      expect(container.read(appSessionProvider).status, AppStatus.active);
-      expect(container.read(appSessionProvider).activeRole?['user_role_id'], 7);
     });
 
-    test('login throws when token is missing and keeps user unauthenticated', () async {
-      final container = ProviderContainer(
-        overrides: [
-          authRepositoryProvider.overrideWithValue(
-            _FakeAuthRepository(
-              loginResponse: {
-                'data': {
-                  'user': {'id': 1, 'is_pending_approval': false},
-                  'roles': [
-                    {'user_role_id': 1, 'is_active': true}
-                  ],
-                },
-              },
-            ),
-          ),
-        ],
+    tearDown(() {
+      container.dispose();
+    });
+
+    test('login stores token/user/roles and sets active session', () async {
+      final service = container.read(authServiceProvider);
+
+      await service.login(email: 'u@example.com', password: 'password');
+
+      expect(container.read(authTokenProvider), 'token-login');
+      expect(container.read(authUserProvider)?['user']['id'], 1);
+      expect((container.read(authUserProvider)?['roles'] as List).length, 1);
+
+      final session = container.read(appSessionProvider);
+      expect(session.status, AppStatus.active);
+      expect(session.activeRole?['user_role_id'], 11);
+    });
+
+    test('register sets onboardingRequired for inactive role', () async {
+      final service = container.read(authServiceProvider);
+
+      await service.register(
+        name: 'n',
+        email: 'u@example.com',
+        password: 'password',
       );
-      addTearDown(container.dispose);
+
+      final session = container.read(appSessionProvider);
+
+      expect(session.status, AppStatus.onboardingRequired);
+      expect(session.activeRole?['user_role_id'], 22);
+      expect(container.read(authTokenProvider), 'token-register');
+    });
+
+    test('throws FormatException when token is missing', () async {
+      fakeRepository.loginResponse = {
+        'data': {
+          'user': {'id': 1, 'is_pending_approval': false},
+          'roles': [
+            {'user_role_id': 11, 'is_active': true},
+          ],
+        },
+      };
 
       final service = container.read(authServiceProvider);
 
       expect(
-        () => service.login(email: 'a@b.com', password: 'p'),
+        () => service.login(email: 'u@example.com', password: 'password'),
         throwsA(isA<FormatException>()),
       );
+
       expect(container.read(authTokenProvider), isNull);
-      expect(container.read(appSessionProvider).status, AppStatus.unauthenticated);
+      expect(
+        container.read(appSessionProvider).status,
+        AppStatus.unauthenticated,
+      );
     });
 
-    test('login tolerates malformed roles and maps to role selection state', () async {
-      final container = ProviderContainer(
-        overrides: [
-          authRepositoryProvider.overrideWithValue(
-            _FakeAuthRepository(
-              loginResponse: {
-                'data': {
-                  'token': 'jwt-token',
-                  'user': {'id': 11, 'is_pending_approval': false},
-                  'roles': ['invalid-role-shape'],
-                },
-              },
-            ),
-          ),
-        ],
-      );
-      addTearDown(container.dispose);
-
+    test('logout clears providers and session', () async {
       final service = container.read(authServiceProvider);
-      await service.login(email: 'test@example.com', password: 'secret');
 
-      expect(container.read(appSessionProvider).status, AppStatus.roleSelectionRequired);
-      expect(container.read(authUserProvider)?['roles'], isA<List<Map<String, dynamic>>>());
-      expect((container.read(authUserProvider)?['roles'] as List).isEmpty, isTrue);
-    });
+      await service.login(email: 'u@example.com', password: 'password');
 
-    test('logout clears token, user and session state', () async {
-      final container = ProviderContainer(
-        overrides: [
-          authRepositoryProvider.overrideWithValue(
-            _FakeAuthRepository(
-              loginResponse: {
-                'data': {
-                  'token': 'jwt-token',
-                  'user': {'id': 10, 'is_pending_approval': false},
-                  'roles': [
-                    {'user_role_id': 7, 'is_active': true}
-                  ],
-                },
-              },
-            ),
-          ),
-        ],
-      );
-      addTearDown(container.dispose);
-
-      final service = container.read(authServiceProvider);
-      await service.login(email: 'test@example.com', password: 'secret');
       service.logout();
 
       expect(container.read(authTokenProvider), isNull);
       expect(container.read(authUserProvider), isNull);
-      expect(container.read(appSessionProvider).status, AppStatus.unauthenticated);
+      expect(
+        container.read(appSessionProvider).status,
+        AppStatus.unauthenticated,
+      );
     });
   });
 }

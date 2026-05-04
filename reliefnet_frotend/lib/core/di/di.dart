@@ -7,12 +7,17 @@ const String _defaultApiBaseUrl = String.fromEnvironment(
   defaultValue: 'http://10.0.2.2:3000',
 );
 
-const Set<String> _authRoutes = {'/auth/login', '/auth/register'};
-
 // 🔹 Auth token (simple in-memory token storage)
 final authTokenProvider = StateProvider<String?>((ref) => null);
+
 // Store authenticated user payload (user, roles, permissions)
 final authUserProvider = StateProvider<Map<String, dynamic>?>((ref) => null);
+
+// Auth routes (no token required)
+const Set<String> _authRoutes = {
+  '/auth/login',
+  '/auth/register',
+};
 
 // HTTP CLIENT (GLOBAL)
 final dioProvider = Provider<Dio>((ref) {

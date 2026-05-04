@@ -19,9 +19,9 @@ class AuthApi {
     required String email,
     required String password,
   }) {
-    return _sendAuthRequest(
-      endpoint: '/auth/register',
-      payload: {
+    return _postAuth(
+      '/auth/register',
+      data: {
         'name': name,
         'email': email,
         'password': password,
@@ -34,9 +34,9 @@ class AuthApi {
     required String email,
     required String password,
   }) {
-    return _sendAuthRequest(
-      endpoint: '/auth/login',
-      payload: {
+    return _postAuth(
+      '/auth/login',
+      data: {
         'email': email,
         'password': password,
       },
@@ -44,45 +44,58 @@ class AuthApi {
     );
   }
 
-  Future<Map<String, dynamic>> _sendAuthRequest({
-    required String endpoint,
-    required Map<String, dynamic> payload,
+  Future<Map<String, dynamic>> _postAuth(
+    String path, {
+    required Map<String, dynamic> data,
     required String fallbackMessage,
   }) async {
     try {
-      final response = await dio.post(endpoint, data: payload);
+      final response = await dio.post(path, data: data);
+      return _parseAuthResponse(response.data, fallbackMessage);
+    } on DioException catch (error) {
+      final statusCode = error.response?.statusCode;
+      final payload = error.response?.data;
 
-      if (response.data is! Map) {
-        throw const AuthApiException('Unexpected API response format');
+      // Status-specific handling
+      if (statusCode == 401) {
+        throw const AuthApiException('Invalid credentials');
       }
 
-      final responseData = Map<String, dynamic>.from(response.data as Map);
-      final isSuccess = responseData['success'] != false;
-
-      if (!isSuccess) {
-        throw AuthApiException(
-          _extractErrorMessage(responseData, fallbackMessage),
+      if (statusCode == 429) {
+        throw const AuthApiException(
+          'Too many attempts. Please retry later.',
         );
       }
 
-      return responseData;
-    } on DioException catch (error) {
-      throw AuthApiException(_mapDioError(statusCode: error.response?.statusCode, fallbackMessage: fallbackMessage));
+      if (payload is Map<String, dynamic>) {
+        throw AuthApiException(
+          _extractErrorMessage(payload, fallbackMessage),
+        );
+      }
+
+      throw AuthApiException(error.message ?? fallbackMessage);
     }
   }
 
-  String _mapDioError({
-    required int? statusCode,
-    required String fallbackMessage,
-  }) {
-    switch (statusCode) {
-      case 401:
-        return 'Invalid credentials';
-      case 429:
-        return 'Too many attempts. Please retry later.';
-      default:
-        return fallbackMessage;
+  Map<String, dynamic> _parseAuthResponse(
+    dynamic payload,
+    String fallbackMessage,
+  ) {
+    if (payload is! Map) {
+      throw const AuthApiException('Unexpected API response format');
     }
+
+    final responseData = Map<String, dynamic>.from(payload as Map);
+
+    final isSuccess = responseData['success'] != false;
+
+    if (!isSuccess) {
+      throw AuthApiException(
+        _extractErrorMessage(responseData, fallbackMessage),
+      );
+    }
+
+    return responseData;
   }
 
   String _extractErrorMessage(

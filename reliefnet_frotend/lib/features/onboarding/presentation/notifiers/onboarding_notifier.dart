@@ -54,47 +54,40 @@ class OnboardingNotifier extends Notifier<OnboardingState> {
         data: data,
       );
 
-      if (result.type == SubmitStepResultType.nextStep) {
-        state = state.copyWith(
-          currentStep: result.nextStep,
-          schema: result.schema,
-          isLoading: false,
-          errors: {},
-        );
-        return;
+      switch (result.type) {
+        case SubmitStepResultType.nextStep:
+          state = state.copyWith(
+            currentStep: result.nextStep,
+            schema: result.schema,
+            isLoading: false,
+            errors: {},
+          );
+          return;
+
+        case SubmitStepResultType.completed:
+          state = state.copyWith(
+            isCompleted: true,
+            isLoading: false,
+          );
+
+          // Update global session state - user is now active
+          ref.read(appSessionProvider.notifier).setOnboardingCompleted();
+          return;
+
+        case SubmitStepResultType.pendingApproval:
+          state = state.copyWith(
+            isPendingApproval: true,
+            isLoading: false,
+          );
+          return;
+
+        case SubmitStepResultType.validationFailed:
+          state = state.copyWith(
+            errors: result.errors,
+            isLoading: false,
+          );
+          return;
       }
-
-      if (result.type == SubmitStepResultType.completed) {
-        state = state.copyWith(
-          isCompleted: true,
-          isLoading: false,
-        );
-
-        // Update global session state - user is now active
-        ref.read(appSessionProvider.notifier).setOnboardingCompleted();
-
-        return;
-      }
-
-      if (result.type == SubmitStepResultType.pendingApproval) {
-        state = state.copyWith(
-          isPendingApproval: true,
-          isLoading: false,
-        );
-        return;
-      }
-
-      if (result.type == SubmitStepResultType.validationFailed) {
-        state = state.copyWith(
-          errors: result.errors,
-          isLoading: false,
-        );
-        return;
-      }
-
-      state = state.copyWith(
-        isLoading: false,
-      );
     } catch (e) {
       state = state.copyWith(
         isLoading: false,

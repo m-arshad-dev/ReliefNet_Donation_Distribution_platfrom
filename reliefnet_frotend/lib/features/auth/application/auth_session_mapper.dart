@@ -1,27 +1,34 @@
-import '../../domain/entities/auth_session_payload.dart';
+class AuthSessionPayload {
+  final String token;
+  final Map<String, dynamic> user;
+  final List<Map<String, dynamic>> roles;
 
-class AuthSessionPayloadParser {
-  const AuthSessionPayloadParser();
+  const AuthSessionPayload({
+    required this.token,
+    required this.user,
+    required this.roles,
+  });
+}
 
-  AuthSessionPayload parse(Map<String, dynamic> response) {
+class AuthSessionMapper {
+  const AuthSessionMapper();
+
+  AuthSessionPayload fromResponse(Map<String, dynamic> response) {
     final raw = response['data'] ?? response;
-
     if (raw is! Map) {
       throw const FormatException('Unexpected authentication response shape');
     }
 
     final data = Map<String, dynamic>.from(raw);
+    final user = _safeMap(data['user']);
+    final roles = _safeRoleList(data['roles']);
     final token = _extractToken(data);
 
     if (token == null) {
       throw const FormatException('Missing authentication token in response');
     }
 
-    return AuthSessionPayload(
-      token: token,
-      user: _safeMap(data['user']),
-      roles: _safeRoleList(data['roles']),
-    );
+    return AuthSessionPayload(token: token, user: user, roles: roles);
   }
 
   Map<String, dynamic> _safeMap(Object? value) {
@@ -43,11 +50,7 @@ class AuthSessionPayloadParser {
   }
 
   String? _extractToken(Map<String, dynamic> data) {
-    final candidates = [
-      data['token'],
-      data['accessToken'],
-      data['access_token'],
-    ];
+    final candidates = [data['token'], data['accessToken'], data['access_token']];
 
     for (final candidate in candidates) {
       if (candidate is String && candidate.isNotEmpty) {
