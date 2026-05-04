@@ -1,7 +1,6 @@
 // AUTH STATE (global)
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_riverpod/legacy.dart';
 
 
 // 🔹 Auth token (simple in-memory token storage)

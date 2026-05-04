@@ -1,5 +1,14 @@
 import 'package:dio/dio.dart';
 
+class AuthApiException implements Exception {
+  final String message;
+
+  const AuthApiException(this.message);
+
+  @override
+  String toString() => message;
+}
+
 class AuthApi {
   AuthApi(this.dio);
 
@@ -47,10 +56,12 @@ class AuthApi {
       final payload = error.response?.data;
 
       if (payload is Map<String, dynamic>) {
-        throw Exception(_extractErrorMessage(payload, fallbackMessage));
+        throw AuthApiException(
+          _extractErrorMessage(payload, fallbackMessage),
+        );
       }
 
-      throw Exception(error.message ?? fallbackMessage);
+      throw AuthApiException(error.message ?? fallbackMessage);
     }
   }
 
@@ -59,13 +70,15 @@ class AuthApi {
     String fallbackMessage,
   ) {
     if (payload is! Map) {
-      throw Exception(fallbackMessage);
+      throw AuthApiException(fallbackMessage);
     }
 
     final responseData = Map<String, dynamic>.from(payload as Map);
 
     if (responseData['success'] == false) {
-      throw Exception(_extractErrorMessage(responseData, fallbackMessage));
+      throw AuthApiException(
+        _extractErrorMessage(responseData, fallbackMessage),
+      );
     }
 
     return responseData;

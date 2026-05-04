@@ -1,6 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../data/providers/auth_providers.dart';
+
+import '../../../core/di/di.dart';
 import '../../../core/navigation/app_session_notifier.dart';
+import '../data/providers/auth_providers.dart';
 
 class AuthService {
   final Ref ref;
@@ -23,23 +25,30 @@ class AuthService {
         .toList();
   }
 
+  String? _extractToken(Map<String, dynamic> data) {
+    final candidates = [
+      data['token'],
+      data['accessToken'],
+      data['access_token']
+    ];
+
+    for (final candidate in candidates) {
+      if (candidate is String && candidate.isNotEmpty) {
+        return candidate;
+      }
+    }
+
+    return null;
+  }
+
   Future<void> login({
     required String email,
     required String password,
   }) async {
     final authRepo = ref.read(authRepositoryProvider);
 
-    final res = await authRepo.login(email, password);
-
-    final data = _extractPayload(res);
-    final user = Map<String, dynamic>.from(data['user'] ?? {});
-    final roles = _extractRoles(data);
-
-    // 🔥 SINGLE SOURCE OF TRUTH (session)
-    ref.read(appSessionProvider.notifier).setAuthenticated(
-      user: user,
-      roles: roles,
-    );
+    final response = await authRepo.login(email, password);
+    _applyAuthenticatedSession(response);
   }
 
   Future<void> register({
@@ -49,19 +58,34 @@ class AuthService {
   }) async {
     final authRepo = ref.read(authRepositoryProvider);
 
-    final res = await authRepo.register(name, email, password);
+    final response = await authRepo.register(name, email, password);
+    _applyAuthenticatedSession(response);
+  }
 
-    final data = _extractPayload(res);
+  void logout() {
+    ref.read(authTokenProvider.notifier).state = null;
+    ref.read(authUserProvider.notifier).state = null;
+    ref.read(appSessionProvider.notifier).logout();
+  }
+
+  void _applyAuthenticatedSession(Map<String, dynamic> response) {
+    final data = _extractPayload(response);
+
     final user = Map<String, dynamic>.from(data['user'] ?? {});
     final roles = _extractRoles(data);
+    final token = _extractToken(data);
 
+    // Keep legacy providers in sync (if still used elsewhere)
+    ref.read(authTokenProvider.notifier).state = token;
+    ref.read(authUserProvider.notifier).state = {
+      'user': user,
+      'roles': roles,
+    };
+
+    // Single source of truth session
     ref.read(appSessionProvider.notifier).setAuthenticated(
       user: user,
       roles: roles,
     );
-  }
-
-  void logout() {
-    ref.read(appSessionProvider.notifier).logout();
   }
 }
