@@ -3,14 +3,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/di/di.dart';
 import '../../../core/navigation/app_session_notifier.dart';
 import '../data/providers/auth_providers.dart';
-import 'parsers/auth_session_payload_parser.dart';
+import 'auth_session_mapper.dart';
 
 class AuthService {
   final Ref ref;
-  final AuthSessionPayloadParser payloadParser;
+  final AuthSessionMapper sessionMapper;
 
-  AuthService(this.ref, {AuthSessionPayloadParser? payloadParser})
-      : payloadParser = payloadParser ?? const AuthSessionPayloadParser();
+  AuthService(this.ref, {AuthSessionMapper? sessionMapper})
+      : sessionMapper = sessionMapper ?? const AuthSessionMapper();
 
   Future<void> login({
     required String email,
@@ -38,9 +38,10 @@ class AuthService {
   }
 
   void _applyAuthenticatedSession(Map<String, dynamic> response) {
-    final payload = payloadParser.parse(response);
+    final payload = sessionMapper.fromResponse(response);
 
     ref.read(authTokenProvider.notifier).state = payload.token;
+
     ref.read(authUserProvider.notifier).state = {
       'user': payload.user,
       'roles': payload.roles,
