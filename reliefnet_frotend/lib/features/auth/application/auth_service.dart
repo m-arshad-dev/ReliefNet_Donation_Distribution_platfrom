@@ -10,7 +10,7 @@ class AuthService {
   final AuthSessionMapper sessionMapper;
 
   AuthService(this.ref, {AuthSessionMapper? sessionMapper})
-    : sessionMapper = sessionMapper ?? const AuthSessionMapper();
+      : sessionMapper = sessionMapper ?? const AuthSessionMapper();
 
   Future<void> login({
     required String email,
@@ -41,6 +41,7 @@ class AuthService {
     final payload = sessionMapper.fromResponse(response);
 
     ref.read(authTokenProvider.notifier).state = payload.token;
+
     ref.read(authUserProvider.notifier).state = {
       'user': payload.user,
       'roles': payload.roles,
