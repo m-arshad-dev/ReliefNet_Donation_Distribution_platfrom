@@ -53,7 +53,17 @@ class AuthApi {
       final response = await dio.post(path, data: data);
       return _parseAuthResponse(response.data, fallbackMessage);
     } on DioException catch (error) {
+      final statusCode = error.response?.statusCode;
       final payload = error.response?.data;
+
+      // Keep improved status-specific handling from codex branch
+      if (statusCode == 401) {
+        throw const AuthApiException('Invalid credentials');
+      }
+
+      if (statusCode == 429) {
+        throw const AuthApiException('Too many attempts. Please retry later.');
+      }
 
       if (payload is Map<String, dynamic>) {
         throw AuthApiException(
@@ -70,12 +80,14 @@ class AuthApi {
     String fallbackMessage,
   ) {
     if (payload is! Map) {
-      throw AuthApiException(fallbackMessage);
+      throw AuthApiException('Unexpected API response format');
     }
 
     final responseData = Map<String, dynamic>.from(payload as Map);
 
-    if (responseData['success'] == false) {
+    final isSuccess = responseData['success'] != false;
+
+    if (!isSuccess) {
       throw AuthApiException(
         _extractErrorMessage(responseData, fallbackMessage),
       );
