@@ -29,6 +29,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return AppAuthForm(
+      formType: AuthFormType.login,
       title: 'Welcome Back',
       subtitle: 'Sign in to continue helping communities in need',
       fields: [
