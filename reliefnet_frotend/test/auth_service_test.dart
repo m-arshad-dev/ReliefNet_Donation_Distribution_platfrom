@@ -26,7 +26,11 @@ class FakeAuthRepository implements AuthRepository {
   }
 
   @override
-  Future<Map<String, dynamic>> register(String name, String email, String password) async {
+  Future<Map<String, dynamic>> register(
+    String name,
+    String email,
+    String password,
+  ) async {
     return registerResponse ??
         {
           'data': {
@@ -47,6 +51,7 @@ void main() {
 
     setUp(() {
       fakeRepository = FakeAuthRepository();
+
       container = ProviderContainer(
         overrides: [
           authRepositoryProvider.overrideWithValue(fakeRepository),
@@ -72,12 +77,17 @@ void main() {
       expect(session.activeRole?['user_role_id'], 11);
     });
 
-    test('register with inactive role sets onboardingRequired', () async {
+    test('register sets onboardingRequired for inactive role', () async {
       final service = container.read(authServiceProvider);
 
-      await service.register(name: 'n', email: 'u@example.com', password: 'password');
+      await service.register(
+        name: 'n',
+        email: 'u@example.com',
+        password: 'password',
+      );
 
       final session = container.read(appSessionProvider);
+
       expect(session.status, AppStatus.onboardingRequired);
       expect(session.activeRole?['user_role_id'], 22);
       expect(container.read(authTokenProvider), 'token-register');
@@ -99,19 +109,23 @@ void main() {
         () => service.login(email: 'u@example.com', password: 'password'),
         throwsA(isA<FormatException>()),
       );
+
       expect(container.read(authTokenProvider), isNull);
-      expect(container.read(appSessionProvider).status, AppStatus.unauthenticated);
+      expect(container.read(appSessionProvider).status,
+          AppStatus.unauthenticated);
     });
 
     test('logout clears providers and session', () async {
       final service = container.read(authServiceProvider);
+
       await service.login(email: 'u@example.com', password: 'password');
 
       service.logout();
 
       expect(container.read(authTokenProvider), isNull);
       expect(container.read(authUserProvider), isNull);
-      expect(container.read(appSessionProvider).status, AppStatus.unauthenticated);
+      expect(container.read(appSessionProvider).status,
+          AppStatus.unauthenticated);
     });
   });
 }

@@ -94,9 +94,7 @@ class AuthService {
     final raw = response['data'] ?? response;
 
     if (raw is! Map) {
-      throw const FormatException(
-        'Unexpected authentication response shape',
-      );
+      throw const FormatException('Unexpected authentication response shape');
     }
 
     final data = Map<String, dynamic>.from(raw);
