@@ -45,9 +45,11 @@ class AuthApi {
       return _parseAuthResponse(response.data, fallbackMessage);
     } on DioException catch (error) {
       final payload = error.response?.data;
+
       if (payload is Map<String, dynamic>) {
         throw Exception(_extractErrorMessage(payload, fallbackMessage));
       }
+
       throw Exception(error.message ?? fallbackMessage);
     }
   }
@@ -61,9 +63,11 @@ class AuthApi {
     }
 
     final responseData = Map<String, dynamic>.from(payload as Map);
+
     if (responseData['success'] == false) {
       throw Exception(_extractErrorMessage(responseData, fallbackMessage));
     }
+
     return responseData;
   }
 
@@ -72,12 +76,15 @@ class AuthApi {
     String fallbackMessage,
   ) {
     final error = responseData['error'];
+
     if (error is Map && error['message'] is String) {
       return error['message'] as String;
     }
+
     if (responseData['message'] is String) {
       return responseData['message'] as String;
     }
+
     return fallbackMessage;
   }
 }
